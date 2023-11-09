@@ -1,0 +1,118 @@
+package com.zzy.dt.job;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.collection.CollectionUtil;
+import cn.iocoder.yudao.framework.mq.core.RedisMQTemplate;
+import cn.iocoder.yudao.framework.mq.core.stream.AbstractTransactionStreamMessageListener;
+import com.zzy.dt.MqConstants;
+import com.zzy.dt.common.util.RedisUtils;
+import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.stream.*;
+import org.springframework.data.redis.core.StreamOperations;
+import org.springframework.scheduling.annotation.Scheduled;
+
+import java.util.*;
+
+/**
+ * redis stream消费者未unack的消息是放在redis内部的一个集合中的，当客户端宕机后并不会自动放回到队列中，只能手动重新入队
+ */
+@Slf4j
+@AllArgsConstructor
+public class RedisPendingMessageResendJob {
+
+    private static final String LOCK_KEY = "redis:pending:msg:lock";
+    private static final long EXPIRE_TIME = 10;
+
+    /**
+     * 消息超时时间，默认 5 分钟
+     * <p>
+     * 1. 超时的消息才会被重新投递
+     * 2. 由于定时任务 1 分钟一次，消息超时后不会被立即重投，极端情况下消息5分钟过期后，再等 1 分钟才会被扫瞄到
+     */
+    // private static final int EXPIRE_TIME = 30;
+
+    private final List<AbstractTransactionStreamMessageListener<?>> listeners;
+    private final RedisMQTemplate redisTemplate;
+    private final String groupName;
+    private final RedissonClient redissonClient;
+
+    /**
+     * 一分钟执行一次,这里选择每分钟的35秒执行，是为了避免整点任务过多的问题
+     */
+    @Scheduled(cron = "*/5 * * * * ?")
+    public void messageResend() {
+        RLock lock = redissonClient.getLock(LOCK_KEY);
+        // 尝试加锁
+        if (lock.tryLock()) {
+            try {
+                execute();
+            } catch (Exception ex) {
+                log.error("[messageResend][执行异常]", ex);
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    /**
+     * 执行清理逻辑
+     *
+     * @see <a href="https://gitee.com/zhijiantianya/ruoyi-vue-pro/pulls/480/files">讨论</a>
+     */
+    private void execute() {
+        StreamOperations<String, Object, Object> ops = redisTemplate.getRedisTemplate().opsForStream();
+        listeners.forEach(listener -> {
+            PendingMessagesSummary pendingMessagesSummary = Objects.requireNonNull(ops.pending(listener.getStreamKey(), groupName));
+            // 每个消费者的 pending 队列消息数量
+            Map<String, Long> pendingMessagesPerConsumer = pendingMessagesSummary.getPendingMessagesPerConsumer();
+            pendingMessagesPerConsumer.forEach((consumerName, pendingMessageCount) -> {
+                if(log.isDebugEnabled()) {
+                    log.debug("[processPendingMessage][消费者({}) 消息数量({})]", consumerName, pendingMessageCount);
+                }
+                // 每个消费者的 pending消息的详情信息
+                PendingMessages pendingMessages = ops.pending(listener.getStreamKey(), Consumer.from(groupName, consumerName), Range.unbounded(), pendingMessageCount);
+                if (pendingMessages.isEmpty()) {
+                    return;
+                }
+                pendingMessages.forEach(pendingMessage -> {
+                    // 获取消息上一次传递到 consumer 的时间,
+                    long lastDelivery = pendingMessage.getElapsedTimeSinceLastDelivery().getSeconds();
+                    // 增加一个过期时间，防止接收端刚接收到key还没操作就被这里ack后重新投递了
+                    if (lastDelivery < EXPIRE_TIME) {
+                        return;
+                    }
+                    // 获取指定 id 的消息体
+                    List<MapRecord<String, Object, Object>> records = ops.range(listener.getStreamKey(),
+                            Range.of(Range.Bound.inclusive(pendingMessage.getIdAsString()), Range.Bound.inclusive(pendingMessage.getIdAsString())));
+                    if (CollUtil.isEmpty(records)) {
+                        return;
+                    }
+                    // 重新投递消息
+                    // redisTemplate.getRedisTemplate().opsForStream().add(StreamRecords.newRecord()
+                    //         .ofObject(records.get(0).getValue()) // 设置内容
+                    //         .withStreamKey(listener.getStreamKey()));
+                    // ack 消息消费完成
+                    // redisTemplate.getRedisTemplate().opsForStream().acknowledge(groupName, records.get(0));
+                    Map<Object, Object> value = records.get(0).getValue();
+                    Set<Map.Entry<Object, Object>> entries = value.entrySet();
+                    Map.Entry<Object, Object> entry = CollectionUtil.get(entries, 0);
+                    List<String> keys = new ArrayList<>();
+                    keys.add(listener.getStreamKey());
+                    keys.add(groupName);
+                    keys.add(String.valueOf(entry.getKey()));
+                    keys.add(MqConstants.DT_TRANSACTION_PENDING + groupName + ":" + pendingMessage.getIdAsString());
+                    String result = RedisUtils.executeScript("lua/requeue.lua", String.class, keys, records.get(0).getId().getValue(), "", entry.getValue());
+                    if ("1".equals(result)) {
+                        log.info("[processPendingMessage][消息({})重新投递成功]", records.get(0));
+                    } else {
+                        log.warn("[processPendingMessage][消息({})重新投递失败],result=[{}]", records.get(0), result);
+                    }
+                });
+            });
+        });
+    }
+}

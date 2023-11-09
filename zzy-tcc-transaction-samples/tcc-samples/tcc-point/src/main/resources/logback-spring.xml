@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+      springcloud中下面spring.application.name，logging.file.path必须配置在bootstrap.yaml，
+      因为cloud启动时读取的bootstrap.yaml，读取不到application.yaml，
+      否则在初始化SpringCloud的SpringApplication时就是FILE_NAME_IS_UNDEFINED，FILE_PATH_IS_UNDEFINED的文件名
+    -->
+    <springProperty scope="context" name="FILE_PATH" source="logging.file.path"/>
+    <springProperty scope="context" name="FILE_NAME" source="spring.application.name"/>
+
+    <!--主机名支持-->
+    <!--    <define name="hostname" class="ch.qos.logback.core.property.CanonicalHostNamePropertyDefiner"/>-->
+
+    <!-- 控制台输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{20}.%M\(%F:%L\): %msg%n</pattern>
+        </layout>
+    </appender>
+
+    <appender name="appLogAppender" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+        <file>${FILE_PATH}/${hostname}/${FILE_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${FILE_PATH}/${hostname}/%d{yyyy-MM-dd}/${FILE_NAME}.%i.log</fileNamePattern>
+            <maxFileSize>500MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>20GB</totalSizeCap>
+        </rollingPolicy>
+<!--        <filter class="ch.qos.logback.classic.filter.LevelFilter">-->
+<!--            <level>DEBUG</level>-->
+<!--            <onMatch>ACCEPT</onMatch>-->
+<!--            <onMismatch>DENY</onMismatch>-->
+<!--        </filter>-->
+    </appender>
+
+<!--    <appender name="thread" class="ch.qos.logback.core.rolling.RollingFileAppender">-->
+<!--        <encoder>-->
+<!--            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{20}.%M\(%F:%L\): %msg%n</pattern>-->
+<!--        </encoder>-->
+<!--        <file>${FILE_PATH}/${hostname}/thread.log</file>-->
+<!--        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">-->
+<!--            <fileNamePattern>${FILE_PATH}/${hostname}/%d{yyyy-MM-dd}/thread.%i.log</fileNamePattern>-->
+<!--            <maxFileSize>500MB</maxFileSize>-->
+<!--            <maxHistory>30</maxHistory>-->
+<!--            <totalSizeCap>20GB</totalSizeCap>-->
+<!--        </rollingPolicy>-->
+<!--    </appender>-->
+
+<!--    <appender name="errorAppender" class="ch.qos.logback.core.rolling.RollingFileAppender">-->
+<!--        <Append>true</Append>-->
+<!--        <file>${FILE_PATH}/${hostname}/${FILE_NAME}-error.log</file>-->
+<!--        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">-->
+<!--            <fileNamePattern>${FILE_PATH}/${hostname}/%d{yyyy-MM-dd}/${FILE_NAME}-error.%i.log</fileNamePattern>-->
+<!--            <maxFileSize>500MB</maxFileSize>-->
+<!--            <maxHistory>30</maxHistory>-->
+<!--            <totalSizeCap>20GB</totalSizeCap>-->
+<!--        </rollingPolicy>-->
+<!--        <encoder>-->
+<!--            <pattern>-->
+<!--                <![CDATA[[%d{yyyy-MM-dd HH:mm:ss.SSSZ} ] - %X{method} %X{requestURIWithQueryString} [ip=%X{remoteAddr}, ref=%X{referrer}, ua=%X{userAgent}, sid=%X{cookie.JSESSIONID}]%n  %-5level %logger{35} - %m%n]]>-->
+<!--            </pattern>-->
+<!--        </encoder>-->
+<!--        <filter class="ch.qos.logback.classic.filter.LevelFilter">-->
+<!--            <level>ERROR</level>-->
+<!--            <onMatch>ACCEPT</onMatch>-->
+<!--            <onMismatch>DENY</onMismatch>-->
+<!--        </filter>-->
+<!--    </appender>-->
+
+    <!-- 异步输出 -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <!-- 不丢失日志.默认的,如果队列的80%已满,则会丢弃TRACT、DEBUG、INFO级别的日志 -->
+        <discardingThreshold>20</discardingThreshold>
+        <!-- 更改默认的队列的深度,该值会影响性能.默认值为256 -->
+        <queueSize>512</queueSize>
+        <!-- 添加附加的appender,最多只能添加一个 -->
+        <appender-ref ref="appLogAppender"/>
+    </appender>
+
+    <root level="INFO" >
+        <appender-ref ref="ASYNC_FILE" />
+    </root>
+
+</configuration>

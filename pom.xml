@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.zzy</groupId>
+    <artifactId>zzy-tcc-transaction</artifactId>
+    <version>${main.version}</version>
+
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>zzy-tcc-transaction-booter</module>
+        <module>zzy-common</module>
+        <module>zzy-tcc-transaction-samples</module>
+        <module>zzy-tcc-transaction-mq</module>
+        <module>zzy-tcc-transaction-redis</module>
+        <module>zzy-light-jdbc</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+        <spring.version>2.3.12.RELEASE</spring.version>
+        <hutool.version>5.8.18</hutool.version>
+        <lombok.version>1.18.24</lombok.version>
+        <main.version>1.0.0</main.version>
+        <redisson.version>3.11.6</redisson.version>
+        <netty.version>4.1.68.Final</netty.version>
+        <!-- 下面这个版本不能随意更换，不然会报一个Open方法异常 -->
+        <redisson-boot.version>3.16.8</redisson-boot.version>
+        <redis.version>3.1.2</redis.version>
+    </properties>
+
+
+    <dependencyManagement>
+
+        <dependencies>
+
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson-boot.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-cache</artifactId>
+                <version>${spring.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-all</artifactId>
+                <version>${hutool.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+            </dependency>
+
+            <!--            <dependency>-->
+            <!--                <groupId>org.redisson</groupId>-->
+            <!--                <artifactId>redisson</artifactId>-->
+            <!--                <version>${redisson.version}</version>-->
+            <!--            </dependency>-->
+
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-all</artifactId>
+                <version>${netty.version}</version>
+            </dependency>
+
+
+        </dependencies>
+
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>
